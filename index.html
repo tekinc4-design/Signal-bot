@@ -281,6 +281,8 @@ let COINS=['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT'];
 let KLINE='4h',INTERVAL=30000,SL_PCT=2,TP1_PCT=2,TP2_PCT=3.5,TP3_PCT=5;
 const BASE='https://api.binance.com/api/v3';
 let history={},candles={},selected=COINS[0],running=true,timer=null,alerts=[],swReg=null,position=null;
+// Her coin için son sinyal verilen mum zamanını tut (4H mum başı = timestamp)
+let lastSignalCandle={}; // {BTCUSDT: 1234567890000, ...}
 
 // ─── TELEGRAM ────────────────────────────────────────────────
 const TG_TOKEN='8651227426:AAGeN7hRByWAUGPMPmEfMdUiTxsXYYrgiQw';
@@ -545,20 +547,46 @@ function drawSpark(data,color){
   data.forEach((p,i)=>{const x=(i/(data.length-1))*w,y=h-((p-min)/rng)*h;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
   ctx.stroke();
 }
+function getCandleTime(){
+  // 4H mum başlangıç zamanı — her 4 saatte bir değişir
+  const now=Date.now();
+  const fourH=4*60*60*1000;
+  return Math.floor(now/fourH)*fourH;
+}
+
 function checkAlerts(){
+  const currentCandle=getCandleTime();
   COINS.forEach(coin=>{
     const arr=history[coin],cds=candles[coin];if(!arr||arr.length<3)return;
     const res=masterSignal(arr,cds||[]);
-    if(res.type==='GÜÇLÜ AL'||res.type==='GÜÇLÜ SAT'){
-      const last=alerts[0];if(last&&last.coin===coin&&last.t===res.type)return;
-      addAlert(coin,res.type,res.price,res.color);
-      sendNotif(res.type+' — '+coin,'$'+fmtP(res.price));
-      document.getElementById('liveBadge').style.display='inline';
-      // Telegram bildirim
-      const emoji=res.type==='GÜÇLÜ AL'?'🟢':'🔴';
-      sendTelegram(emoji+' <b>'+res.type+'</b> — <b>'+coin+'</b>\n\n💰 Fiyat: $'+fmtP(res.price)+'\n📊 Skor: '+(res.sc>=0?'+':'')+res.sc+'/8\n⏱ Periyot: 4H\n🕐 '+new Date().toLocaleTimeString('tr-TR'));
-      if(!position&&coin===selected)openPos(coin,res.type==='GÜÇLÜ AL'?'LONG':'SHORT',res.price);
-    }
+
+    // Sadece GÜÇLÜ AL veya GÜÇLÜ SAT
+    if(res.type!=='GÜÇLÜ AL'&&res.type!=='GÜÇLÜ SAT')return;
+
+    // Bu mum için zaten sinyal verilmiş mi?
+    if(lastSignalCandle[coin]===currentCandle)return;
+
+    // Sinyal ver
+    lastSignalCandle[coin]=currentCandle;
+    addAlert(coin,res.type,res.price,res.color);
+    sendNotif(res.type+' — '+coin,'$'+fmtP(res.price));
+    document.getElementById('liveBadge').style.display='inline';
+
+    // Telegram
+    const emoji=res.type==='GÜÇLÜ AL'?'🟢':'🔴';
+    const tgMsg=emoji+' <b>'+res.type+'</b> — <b>'+coin+'</b>\n\n'+
+      '💰 Fiyat: $'+fmtP(res.price)+'\n'+
+      '📊 Skor: '+(res.sc>=0?'+':'')+res.sc+'/8\n'+
+      '⏱ Periyot: 4H\n'+
+      '🕐 '+new Date().toLocaleTimeString('tr-TR')+'\n\n'+
+      '🎯 TP1: $'+fmtP(res.price*(1+(res.type==='GÜÇLÜ AL'?1:-1)*TP1_PCT/100))+'\n'+
+      '🎯 TP2: $'+fmtP(res.price*(1+(res.type==='GÜÇLÜ AL'?1:-1)*TP2_PCT/100))+'\n'+
+      '🎯 TP3: $'+fmtP(res.price*(1+(res.type==='GÜÇLÜ AL'?1:-1)*TP3_PCT/100))+'\n'+
+      '🛑 SL: $'+fmtP(res.price*(1-(res.type==='GÜÇLÜ AL'?1:-1)*SL_PCT/100));
+    sendTelegram(tgMsg);
+
+    // Pozisyon aç
+    if(!position&&coin===selected)openPos(coin,res.type==='GÜÇLÜ AL'?'LONG':'SHORT',res.price);
   });
 }
 function addAlert(coin,type,price,color,extra=''){
