@@ -290,6 +290,73 @@ letter-spacing: 1px;
     </div>
   </div>
 </div>
+
+<!-- EMA 200 -->
+<div class="ind-card" style="margin-bottom:12px;">
+  <div class="ind-label">📉 EMA 200 — TREND FİLTRESİ</div>
+  <div style="display:flex;gap:8px;">
+    <div style="flex:1;background:#080810;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">EMA 200</div>
+      <div class="macd-v" id="ema200val">—</div>
+    </div>
+    <div style="flex:1;background:#080810;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">KONUM</div>
+      <div class="macd-v" id="ema200pos">—</div>
+    </div>
+    <div style="flex:1;background:#080810;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">TREND</div>
+      <div class="macd-v" id="ema200trend">—</div>
+    </div>
+  </div>
+  <div style="margin-top:8px;font-size:10px;color:var(--muted);" id="ema200desc">—</div>
+</div>
+
+<!-- ICT: ORDER BLOCK -->
+<div class="ind-card" style="margin-bottom:12px;">
+  <div class="ind-label">🏦 ICT — ORDER BLOCK</div>
+  <div id="obList"><div style="font-size:11px;color:var(--muted);text-align:center;padding:10px 0;">Hesaplanıyor...</div></div>
+  <div style="margin-top:8px;display:flex;gap:8px;">
+    <div style="flex:1;background:#080810;border-radius:8px;padding:8px 10px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">BULLISH OB</div>
+      <div class="macd-v" id="obBullCount" style="color:#00ff88;">—</div>
+    </div>
+    <div style="flex:1;background:#080810;border-radius:8px;padding:8px 10px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">BEARISH OB</div>
+      <div class="macd-v" id="obBearCount" style="color:#ff4466;">—</div>
+    </div>
+    <div style="flex:1;background:#080810;border-radius:8px;padding:8px 10px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">EN YAKIN</div>
+      <div class="macd-v" id="obNearest">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- VOLUME DELTA -->
+<div class="ind-card" style="margin-bottom:12px;">
+  <div class="ind-label">📦 VOLUME DELTA — ALICI/SATICI BASKISI</div>
+  <div style="display:flex;gap:8px;margin-bottom:8px;">
+    <div style="flex:1;background:#080810;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">ALICI HACMİ</div>
+      <div class="macd-v" id="volBuy" style="color:#00ff88;">—</div>
+    </div>
+    <div style="flex:1;background:#080810;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">SATICI HACMİ</div>
+      <div class="macd-v" id="volSell" style="color:#ff4466;">—</div>
+    </div>
+    <div style="flex:1;background:#080810;border-radius:8px;padding:10px 12px;">
+      <div style="font-size:9px;color:var(--muted);margin-bottom:3px;">DELTA</div>
+      <div class="macd-v" id="volDelta">—</div>
+    </div>
+  </div>
+  <!-- Volume bar -->
+  <div style="background:#111;border-radius:6px;height:8px;overflow:hidden;display:flex;">
+    <div id="volBuyBar" style="height:100%;background:#00ff88;transition:width .5s;width:50%"></div>
+    <div id="volSellBar" style="height:100%;background:#ff4466;transition:width .5s;width:50%"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:3px;">
+    <span>Alım Baskısı</span><span id="volDesc">—</span><span>Satım Baskısı</span>
+  </div>
+</div>
 ```
 
   </div>
@@ -422,7 +489,8 @@ async function loadKlines() {
       history[coin] = d.map(k => parseFloat(k[4]));
       candles[coin] = d.map(k => ({
         o: parseFloat(k[1]), h: parseFloat(k[2]),
-        l: parseFloat(k[3]), c: parseFloat(k[4])
+        l: parseFloat(k[3]), c: parseFloat(k[4]),
+        v: parseFloat(k[5])
       }));
     } catch {}
   }));
@@ -441,7 +509,7 @@ async function tick() {
           const last = candles[c].at(-1);
           candles[c] = [...candles[c].slice(-99), {
             o: last.c, h: Math.max(last.h, map[c]),
-            l: Math.min(last.l, map[c]), c: map[c]
+            l: Math.min(last.l, map[c]), c: map[c], v: last.v || 1
           }];
         }
       }
@@ -479,6 +547,135 @@ function macd(arr) {
 function ma(arr, p) {
   if (arr.length < p) return arr.at(-1)||0;
   return arr.slice(-p).reduce((a,b)=>a+b,0)/p;
+}
+
+// ─── EMA 200 ─────────────────────────────────────────────────
+function updateEMA200(arr, price) {
+  if (arr.length < 50) {
+    document.getElementById('ema200val').textContent = 'Yetersiz veri';
+    return;
+  }
+  const e200 = ema(arr, Math.min(200, arr.length));
+  const e50 = ema(arr, Math.min(50, arr.length));
+  const above = price > e200;
+  const color = above ? '#00ff88' : '#ff4466';
+  const pct = ((price - e200) / e200 * 100);
+
+  document.getElementById('ema200val').textContent = '$' + fmtPrice(e200);
+  document.getElementById('ema200val').style.color = color;
+  document.getElementById('ema200pos').textContent = above ? '▲ Üstünde' : '▼ Altında';
+  document.getElementById('ema200pos').style.color = color;
+  document.getElementById('ema200trend').textContent = e50 > e200 ? '🐂 Boğa' : '🐻 Ayı';
+  document.getElementById('ema200trend').style.color = e50 > e200 ? '#00ff88' : '#ff4466';
+  document.getElementById('ema200desc').textContent =
+    `EMA200'e uzaklık: ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% — ${above ? 'Uzun pozisyon için uygun zemin' : 'Kısa pozisyon için baskı altında'}`;
+}
+
+// ─── ICT: ORDER BLOCK ─────────────────────────────────────────
+function calcOrderBlocks(candles) {
+  const obs = [];
+  for (let i = 2; i < candles.length - 1; i++) {
+    const prev2 = candles[i - 2];
+    const prev  = candles[i - 1];
+    const curr  = candles[i];
+    const next  = candles[i + 1];
+    // Bullish OB: düşen bir mum ardından güçlü yükseliş
+    if (prev.c < prev.o && curr.c > curr.o &&
+        curr.c > prev.h && next && next.c > curr.c) {
+      obs.push({ type: 'bull', top: prev.h, bot: prev.l, idx: i });
+    }
+    // Bearish OB: yükselen bir mum ardından güçlü düşüş
+    if (prev.c > prev.o && curr.c < curr.o &&
+        curr.c < prev.l && next && next.c < curr.c) {
+      obs.push({ type: 'bear', top: prev.h, bot: prev.l, idx: i });
+    }
+  }
+  return obs.slice(-8);
+}
+
+function updateOrderBlocks(candles, price) {
+  const obs = calcOrderBlocks(candles);
+  const bulls = obs.filter(o => o.type === 'bull');
+  const bears = obs.filter(o => o.type === 'bear');
+
+  document.getElementById('obBullCount').textContent = bulls.length + ' adet';
+  document.getElementById('obBearCount').textContent = bears.length + ' adet';
+
+  // En yakın OB
+  const all = obs.map(o => ({ ...o, dist: Math.abs(price - (o.top + o.bot) / 2) }));
+  all.sort((a, b) => a.dist - b.dist);
+  const nearest = all[0];
+  const nearEl = document.getElementById('obNearest');
+  if (nearest) {
+    nearEl.textContent = nearest.type === 'bull' ? '🟢 Bullish' : '🔴 Bearish';
+    nearEl.style.color = nearest.type === 'bull' ? '#00ff88' : '#ff4466';
+  } else {
+    nearEl.textContent = 'Yok';
+    nearEl.style.color = '#4a4a6a';
+  }
+
+  const box = document.getElementById('obList');
+  const recent = obs.slice(-4).reverse();
+  if (!recent.length) {
+    box.innerHTML = '<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 0;">Tespit edilemedi</div>';
+    return;
+  }
+  box.innerHTML = recent.map(o => {
+    const isBull = o.type === 'bull';
+    const color = isBull ? '#00ff88' : '#ff4466';
+    const label = isBull ? '🟢 Bullish OB' : '🔴 Bearish OB';
+    const inside = price >= o.bot && price <= o.top;
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;
+        background:${color}0d;border:1px solid ${color}22;border-radius:8px;
+        padding:7px 10px;margin-bottom:5px;">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:${color}">${label}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">
+            $${fmtPrice(o.bot)} — $${fmtPrice(o.top)}
+          </div>
+        </div>
+        <div style="font-size:10px;color:${inside ? '#ffb830' : color};text-align:right;">
+          ${inside ? '⚠ İÇİNDE' : price < o.bot ? '↑ Altında' : '↓ Üstünde'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ─── VOLUME DELTA ─────────────────────────────────────────────
+function updateVolumeDelta(candles) {
+  if (!candles || candles.length < 5) return;
+  // Yaklaşık: yeşil mumlar → alım, kırmızı mumlar → satım hacmi
+  const recent = candles.slice(-20);
+  let buyVol = 0, sellVol = 0;
+  recent.forEach(c => {
+    const range = c.h - c.l || 1;
+    const buyPct = (c.c - c.l) / range;
+    const vol = c.v || 1;
+    buyVol  += vol * buyPct;
+    sellVol += vol * (1 - buyPct);
+  });
+  const total = buyVol + sellVol || 1;
+  const buyPct = (buyVol / total * 100);
+  const sellPct = 100 - buyPct;
+  const delta = buyVol - sellVol;
+  const deltaColor = delta > 0 ? '#00ff88' : '#ff4466';
+
+  document.getElementById('volBuy').textContent = buyPct.toFixed(1) + '%';
+  document.getElementById('volSell').textContent = sellPct.toFixed(1) + '%';
+  document.getElementById('volDelta').textContent = (delta > 0 ? '+' : '') + (delta / total * 100).toFixed(1) + '%';
+  document.getElementById('volDelta').style.color = deltaColor;
+  document.getElementById('volBuyBar').style.width = buyPct + '%';
+  document.getElementById('volSellBar').style.width = sellPct + '%';
+
+  let desc = '⚖ Dengeli';
+  if (buyPct > 65) desc = '⚡ Güçlü alım baskısı';
+  else if (buyPct > 55) desc = '↑ Alım baskısı';
+  else if (sellPct > 65) desc = '⚡ Güçlü satım baskısı';
+  else if (sellPct > 55) desc = '↓ Satım baskısı';
+  document.getElementById('volDesc').textContent = desc;
+  document.getElementById('volDesc').style.color = deltaColor;
 }
 
 // ─── ICT: FVG ────────────────────────────────────────────────
@@ -671,9 +868,12 @@ function updateUI() {
     e.textContent = txt; e.style.color = color;
   });
 
-  // FVG
+  // FVG + EMA200 + OB + Volume
   if (candles[selected] && candles[selected].length > 3) {
     updateFVG(candles[selected], price);
+    updateEMA200(arr, price);
+    updateOrderBlocks(candles[selected], price);
+    updateVolumeDelta(candles[selected]);
   }
 }
 
